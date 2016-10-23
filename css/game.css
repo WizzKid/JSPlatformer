@@ -5,6 +5,8 @@
 .lava          { background: rgb(0, 237, 255); }
 .wall          { background: black;   }
 .floater { background: rgb(226, 213, 70); }
+.actor  { position: absolute;  }
+.player { background: rgb(64, 64, 64); }
 
 .game {
   overflow: hidden;
