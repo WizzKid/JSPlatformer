@@ -1,5 +1,10 @@
 //LAB SIX <><><><><><><><><><><><><><><><><><><><>
-var spawnPos;
+var spawnPos = new Vector(7,16);
+var actorChars = {
+	"@": Player,
+	"o": Coin,
+	"%": Potion
+};
 
 function Level(plan) {
   // Use the length of a single row to set the width of the level
@@ -10,7 +15,7 @@ function Level(plan) {
 
   // Store the individual tiles in our own, separate array
   this.grid = [];
-
+  this.actors = [];
   // Loop through each row in the plan, creating an array in our grid
   for (var y = 0; y < this.height; y++) {
     var line = plan[y], gridLine = [];
@@ -22,26 +27,27 @@ function Level(plan) {
 
       var ch = line[x], fieldType = null;
       // Use if and else to handle the three cases
-      if (ch==='@')
-	  {
+      var Actor = actorChars[ch];
+	  if (Actor){
         // Create a new player at that grid position.
-        this.player = new Player(new Vector(x, y));
-//LAB SIX <><>><<><>>>>><<>><<><>><>><>>>><><>
-		spawnPos = new Vector(x,y-0.5);
-		console.log(spawnPos);
+        this.actors.push(new Actor(new Vector(x, y), ch));
 	  }
       else if (ch == "x")
         fieldType = "wall";
       // Because there is a third case (space ' '), use an "else if" instead of "else"
       else if (ch == "!")
         fieldType = "lava";
-
+	  else if (ch == "%")
+		fieldType == "potion";
       // "Push" the fieldType, which is a string, onto the gridLine array (at the end).
       gridLine.push(fieldType);
     }
     // Push the entire row onto the array of rows.
     this.grid.push(gridLine);
   }
+  this.player = this.actors.filter(function(actor) {
+	  return actor.type == "player";
+  })[0];
 }
 
 function Vector(x, y) {
@@ -65,6 +71,35 @@ function Player(pos) {
   this.speed = new Vector(0, 0);
 }
 Player.prototype.type = "player";
+
+function Coin(pos){
+	this.basePos = this.pos = pos.plus(new Vector(0.2,0.1));
+	this.size = new Vector(0.6, 0.6);
+	this.wobble = Math.random() * Math.PI *2;
+}
+Coin.prototype.type = 'coin';
+
+var wobbleSpeed = 8;
+var wobbleDist = 0.07;
+Coin.prototype.act = function(step) {
+	this.wobble += step * wobbleSpeed;
+	var wobblePos = Math.sin(this.wobble) * wobbleDist;
+	this.pos = this.basePos.plus(new Vector(0, wobblePos));
+};
+
+function Potion(pos) {
+	this.basePos = this.pos = pos.plus(new Vector(0.4,0.1));
+	this.size = new Vector(0.4, 0.7);
+	this.wobble = Math.random() * Math.PI *20;
+}
+
+Potion.prototype.type = 'potion';
+
+Potion.prototype.act = function(step) {
+	this.wobble += step * wobbleSpeed;
+	var wobblePos = Math.cos(this.wobble) * wobbleDist;
+	this.pos = this.basePos.plus(new Vector(0, wobblePos));
+};
 
 // Helper function to easily create an element of a type provided 
 // and assign it a class.
@@ -110,24 +145,25 @@ DOMDisplay.prototype.drawBackground = function() {
 };
 
 // Draw the player agent
-DOMDisplay.prototype.drawPlayer = function() {
+DOMDisplay.prototype.drawActors = function() {
   // Create a new container div for actor dom elements
   var wrap = elt("div");
 
-  var actor = this.level.player;
+  this.level.actors.forEach(function(actor) {
   var rect = wrap.appendChild(elt("div",
                                     "actor " + actor.type));
   rect.style.width = actor.size.x * scale + "px";
   rect.style.height = actor.size.y * scale + "px";
   rect.style.left = actor.pos.x * scale + "px";
   rect.style.top = actor.pos.y * scale + "px";
+  });
   return wrap;
 };
 
 DOMDisplay.prototype.drawFrame = function() {
   if (this.actorLayer)
     this.wrap.removeChild(this.actorLayer);
-  this.actorLayer = this.wrap.appendChild(this.drawPlayer());
+  this.actorLayer = this.wrap.appendChild(this.drawActors());
   this.scrollPlayerIntoView();
 };
 
@@ -176,16 +212,27 @@ Level.prototype.obstacleAt = function(pos, size) {
 	}
 };
 
+Level.prototype.actorAt = function(actor) {
+  for (var i = 0; i < this.actors.length; i++) {
+    var other = this.actors[i];
+    if (other != actor &&
+        actor.pos.x + actor.size.x > other.pos.x &&
+        actor.pos.x < other.pos.x + other.size.x &&
+        actor.pos.y + actor.size.y > other.pos.y &&
+        actor.pos.y < other.pos.y + other.size.y)
+      return other;
+  }
+};
+
 // Update simulation each step based on keys & step size
 Level.prototype.animate = function(step, keys) {
 	
-if (this.status != null)
-	this.finishDelay -= step;
-
   // Ensure each is maximum 100 milliseconds 
   while (step > 0) {
     var thisStep = Math.min(step, maxStep);
-      this.player.act(thisStep, this, keys);
+		this.actors.forEach(function(actor) {
+			actor.act(thisStep, this, keys);
+		}, this);
    // Do this by looping across the step size, subtracing either the
    // step itself or 100 milliseconds
     step -= thisStep;
@@ -193,7 +240,7 @@ if (this.status != null)
 };
 
 var maxStep = 0.05;
-var playerXSpeed = 10;
+var playerXSpeed = 11;
 
 Player.prototype.moveX = function(step, level, keys) {
   this.speed.x = 0;
@@ -207,8 +254,8 @@ Player.prototype.moveX = function(step, level, keys) {
 	this.pos = newPos;
 };
 
-var gravity = 70;
-var jumpSpeed = 20;
+var gravity = 60;
+var jumpSpeed = 22;
 var dyingSpeed = 3;
 var dyingJumpSpeed = 6;
 
@@ -225,10 +272,6 @@ Player.prototype.moveY = function(step, level, keys) {
 //LAB SIX	>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 	if (obstacle == "lava"){
 		this.pos = spawnPos;
-		level.lavaTouched();
-		//I tried really hard to use setTimeout(function(){this.pos = spawnPos;}, 1000) to give time to display a death animation,
-		//but it seems that since we are using step based time I could not use this. Either that or something to do with scope of this.pos 
-		//(I tried changing the scope though)
 	}
   }	else {
 		this.pos = newPos;
@@ -239,17 +282,24 @@ Player.prototype.moveY = function(step, level, keys) {
 Player.prototype.act = function(step, level, keys) {
   this.moveX(step, level, keys);
   this.moveY(step, level, keys);
+  
+  var otherActor = level.actorAt(this);
+  if(otherActor)
+	  level.playerTouched(otherActor.type, otherActor);
 };
 
-Level.prototype.lavaTouched = function() {
-
-  // if the player touches lava and the player hasn't won
-  // Player loses
-  if (this.status == null){
-	  this.status = "lost";
-	  this.finishDelay = 1;
-  }
-}
+Level.prototype.playerTouched = function(type, actor) {
+	if(type == 'coin') {
+		this.actors = this.actors.filter(function(other) {
+			return other != actor;
+		});
+	}
+	if(type == 'potion') {
+		this.actors = this.actors.filter(function(other) {
+			return other != actor;
+		});
+	}
+};
 
 // Arrow key codes for readibility
 var arrowCodes = {37: "left", 38: "up", 39: "right", 40: "down"};
